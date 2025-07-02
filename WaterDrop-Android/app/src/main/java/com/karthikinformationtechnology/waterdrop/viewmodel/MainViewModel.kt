@@ -8,7 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.karthikinformationtechnology.waterdrop.connection.ConnectionManager
 import com.karthikinformationtechnology.waterdrop.data.model.ConnectionState
 import com.karthikinformationtechnology.waterdrop.data.model.DiscoveredDevice
-import com.karthikinformationtechnology.waterdrop.data.model.FileTransfer
+import com.karthikinformationtechnology.waterdrop.connection.ConnectionManager.ActiveTransfer
 import com.karthikinformationtechnology.waterdrop.data.model.TransferItem
 // import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.StateFlow
@@ -32,7 +32,7 @@ class MainViewModel(
     val connectionState: StateFlow<ConnectionState> = connectionManager.connectionState
     val discoveredDevices: StateFlow<List<DiscoveredDevice>> = connectionManager.discoveredDevices
     val connectedDevice: StateFlow<DiscoveredDevice?> = connectionManager.connectedDevice
-    val activeTransfers: StateFlow<List<FileTransfer>> = connectionManager.activeTransfers
+    val activeTransfers: StateFlow<List<ActiveTransfer>> = connectionManager.activeTransfers
     val transferHistory: StateFlow<List<TransferItem>> = connectionManager.transferHistory
     val errorMessage: StateFlow<String?> = connectionManager.errorMessage
     val isBluetoothEnabled: StateFlow<Boolean> = connectionManager.isBluetoothEnabled

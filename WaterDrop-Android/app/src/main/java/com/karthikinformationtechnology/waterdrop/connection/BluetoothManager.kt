@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.app.ActivityCompat
 import com.karthikinformationtechnology.waterdrop.data.model.BluetoothDeviceInfo
 import com.karthikinformationtechnology.waterdrop.data.model.DiscoveredDevice
+import com.karthikinformationtechnology.waterdrop.data.model.WebRTCSignalingData
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -48,6 +49,11 @@ class WaterDropBluetoothManager(
     private var isAdvertising = false
     
     private var currentChannelCallback: ((List<DiscoveredDevice>) -> Unit)? = null
+    private var signalingCallback: ((WebRTCSignalingData) -> Unit)? = null
+    
+    // WebRTC signaling over Bluetooth
+    private var deviceId: String = generateDeviceChecksum()
+    private var deviceName: String = android.os.Build.MODEL ?: "WaterDrop Device"
     
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
@@ -387,5 +393,42 @@ class WaterDropBluetoothManager(
         return MessageDigest.getInstance("MD5")
             .digest(deviceInfo.toByteArray())
             .joinToString("") { "%02x".format(it) }
+    }
+    
+    // WebRTC Signaling Methods
+    fun setSignalingCallback(callback: (WebRTCSignalingData) -> Unit) {
+        Log.d(TAG, "setSignalingCallback: Setting WebRTC signaling callback")
+        signalingCallback = callback
+    }
+    
+    fun sendWebRTCSignaling(device: DiscoveredDevice, signalingData: WebRTCSignalingData) {
+        Log.d(TAG, "sendWebRTCSignaling: Sending WebRTC signaling to ${device.name}")
+        try {
+            // In a real implementation, this would send the signaling data
+            // over the established Bluetooth connection
+            val jsonData = signalingData.toJsonString()
+            Log.d(TAG, "sendWebRTCSignaling: Signaling data: $jsonData")
+            
+            // For now, simulate sending the data
+            // In practice, this would use GATT characteristics or RFCOMM
+        } catch (e: Exception) {
+            Log.e(TAG, "sendWebRTCSignaling: Error sending signaling data", e)
+        }
+    }
+    
+    private fun handleReceivedSignalingData(data: ByteArray) {
+        try {
+            val jsonString = String(data, Charsets.UTF_8)
+            val signalingData = WebRTCSignalingData.fromJsonString(jsonString)
+            
+            if (signalingData != null) {
+                Log.d(TAG, "handleReceivedSignalingData: Received WebRTC signaling: ${signalingData.type}")
+                signalingCallback?.invoke(signalingData)
+            } else {
+                Log.w(TAG, "handleReceivedSignalingData: Failed to parse signaling data")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "handleReceivedSignalingData: Error handling signaling data", e)
+        }
     }
 }

@@ -395,6 +395,7 @@ class ConnectionManager(
                     _connectionState.value = ConnectionState.CONNECTED
                 }
             }
+            }
         }
     }
     

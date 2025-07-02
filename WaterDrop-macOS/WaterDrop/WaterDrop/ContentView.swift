@@ -190,16 +190,45 @@ struct ContentView: View {
                 
                 Spacer()
                 
-                if connectionManager.connectionState == .disconnected {
-                    Button("Start Discovery") {
-                        connectionManager.startDiscovery()
+                // WebRTC Status Indicator
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .fill(webRTCStatusColor)
+                            .frame(width: 8, height: 8)
+                        
+                        Text("WebRTC")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundColor(.white.opacity(0.6))
                     }
-                    .buttonStyle(NothingButtonStyle(variant: .primary))
-                } else if connectionManager.connectionState == .connected {
-                    Button("Disconnect") {
-                        connectionManager.disconnectFromDevice()
+                    
+                    Text(webRTCStatusText)
+                        .font(.system(size: 10, weight: .light))
+                        .foregroundColor(.white.opacity(0.5))
+                }
+                
+                // Action Buttons
+                VStack(spacing: 8) {
+                    if connectionManager.connectionState == .disconnected {
+                        Button("Start Discovery") {
+                            logger.info("🔍 Start Discovery button tapped")
+                            connectionManager.startDiscovery()
+                        }
+                        .buttonStyle(NothingButtonStyle(variant: .primary))
+                    } else if connectionManager.connectionState == .connected {
+                        Button("Initiate WebRTC") {
+                            logger.info("🌐 Initiate WebRTC button tapped")
+                            connectionManager.initiateWebRTCConnection()
+                        }
+                        .buttonStyle(NothingButtonStyle(variant: .primary))
+                        .disabled(connectionManager.webRTCConnectionState == .connected)
+                        
+                        Button("Disconnect") {
+                            logger.info("🔌 Disconnect button tapped")
+                            connectionManager.disconnectFromDevice()
+                        }
+                        .buttonStyle(NothingButtonStyle(variant: .secondary))
                     }
-                    .buttonStyle(NothingButtonStyle(variant: .secondary))
                 }
             }
         }
@@ -272,6 +301,36 @@ struct ContentView: View {
         }
     }
     
+    private var webRTCStatusColor: Color {
+        switch connectionManager.webRTCConnectionState {
+        case .new:
+            return .gray
+        case .connecting:
+            return .orange
+        case .connected:
+            return .green
+        case .disconnected, .failed, .closed:
+            return .red
+        }
+    }
+    
+    private var webRTCStatusText: String {
+        switch connectionManager.webRTCConnectionState {
+        case .new:
+            return "Not initialized"
+        case .connecting:
+            return "Connecting..."
+        case .connected:
+            return "Ready for transfer"
+        case .disconnected:
+            return "Disconnected"
+        case .failed:
+            return "Failed"
+        case .closed:
+            return "Closed"
+        }
+    }
+    
     // MARK: - Device Discovery View
     private var deviceDiscoveryView: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -339,7 +398,7 @@ struct ContentView: View {
                     showingFilePicker = true
                 }
                 .buttonStyle(NothingButtonStyle(variant: .primary))
-                .disabled(connectionManager.connectionState != .connected)
+                .disabled(connectionManager.webRTCConnectionState != .connected)
                 
                 if !selectedFiles.isEmpty {
                     VStack(alignment: .leading, spacing: 10) {
@@ -370,7 +429,7 @@ struct ContentView: View {
                             selectedFiles.removeAll()
                         }
                         .buttonStyle(NothingButtonStyle(variant: .secondary))
-                        .disabled(connectionManager.connectionState != .connected)
+                        .disabled(connectionManager.webRTCConnectionState != .connected)
                     }
                     .padding(15)
                     .background(
@@ -458,7 +517,7 @@ struct ContentView: View {
     }
 }
 
-// MARK: - Custom Views
+// MARK: - Custom Views (Outside of ContentView to avoid circular references)
 struct DeviceRowView: View {
     let device: DiscoveredDevice
     let onConnect: () -> Void
@@ -541,7 +600,7 @@ struct TransferRowView: View {
                         .foregroundColor(.white)
                         .lineLimit(1)
                     
-                    Text(formatFileSize(transfer.fileSize))
+                    Text(FileFormatUtils.formatFileSize(transfer.fileSize))
                         .font(.system(size: 12, weight: .light))
                         .foregroundColor(.white.opacity(0.6))
                 }
@@ -617,14 +676,14 @@ struct HistoryRowView: View {
                     .lineLimit(1)
                 
                 HStack(spacing: 8) {
-                    Text(formatFileSize(item.fileSize))
+                    Text(FileFormatUtils.formatFileSize(item.fileSize))
                         .font(.system(size: 12, weight: .light))
                         .foregroundColor(.white.opacity(0.6))
                     
                     Text("•")
                         .foregroundColor(.white.opacity(0.4))
                     
-                    Text(formatDate(item.transferDate))
+                    Text(FileFormatUtils.formatDate(item.transferDate))
                         .font(.system(size: 12, weight: .light))
                         .foregroundColor(.white.opacity(0.6))
                 }
@@ -763,18 +822,20 @@ struct NothingButtonStyle: ButtonStyle {
     }
 }
 
-// MARK: - Helper Functions
-private func formatFileSize(_ bytes: Int64) -> String {
-    let formatter = ByteCountFormatter()
-    formatter.countStyle = .file
-    return formatter.string(fromByteCount: bytes)
-}
-
-private func formatDate(_ date: Date) -> String {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .short
-    return formatter.string(from: date)
+// MARK: - Helper Utilities
+struct FileFormatUtils {
+    static func formatFileSize(_ bytes: Int64) -> String {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter.string(fromByteCount: bytes)
+    }
+    
+    static func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
 }
 
 #Preview {

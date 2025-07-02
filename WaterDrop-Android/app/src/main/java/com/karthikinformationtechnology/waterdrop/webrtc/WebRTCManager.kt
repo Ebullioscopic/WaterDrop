@@ -10,8 +10,7 @@ import java.util.concurrent.ConcurrentHashMap
 
 /**
  * WebRTC Manager for P2P file transfers
- * Note: Using simplified implementation for now - full WebRTC integration requires
- * more complex setup with proper WebRTC libraries
+ * STRICT RULE: Only file transfers happen via WebRTC - Bluetooth is only for signaling
  */
 class WebRTCManager(
     private val context: Context
@@ -22,7 +21,7 @@ class WebRTCManager(
         private const val CHUNK_SIZE = 16384 // 16KB chunks for file transfer
     }
 
-    // Simplified state management for now
+    // WebRTC connection state management
     private val _connectionState = MutableStateFlow(WebRTCConnectionState.NEW)
     val connectionState: StateFlow<WebRTCConnectionState> = _connectionState.asStateFlow()
     
@@ -39,37 +38,40 @@ class WebRTCManager(
     private val pendingTransfers = ConcurrentHashMap<String, FileTransferState>()
     private val receivingFiles = ConcurrentHashMap<String, ReceivingFileState>()
     
-    // Signaling callbacks
+    // Signaling callbacks - these communicate with Bluetooth layer
     private var onLocalDescriptionReady: ((String) -> Unit)? = null
     private var onIceCandidateReady: ((String) -> Unit)? = null
     
+    // WebRTC Data Channel for file transfers (simulated for now - to be replaced with real WebRTC)
+    private var dataChannelOpen = false
+    
     init {
-        Log.d(TAG, "init: Initializing WebRTC Manager (Simplified)")
-        // For now, simulate connected state after initialization
-        CoroutineScope(Dispatchers.Main).launch {
-            delay(1000)
-            _connectionState.value = WebRTCConnectionState.CONNECTED
-            _dataChannelState.value = DataChannelState.OPEN
-        }
+        Log.d(TAG, "🌐 Initializing WebRTC Manager - FILES ONLY via WebRTC, signaling via Bluetooth")
+        
+        // Initialize in disconnected state - only connect when signaling completes
+        _connectionState.value = WebRTCConnectionState.NEW
+        _dataChannelState.value = DataChannelState.CONNECTING
     }
     
     fun createOffer(
         onLocalDescription: (String) -> Unit,
         onIceCandidate: (String) -> Unit
     ) {
-        Log.d(TAG, "createOffer: Creating WebRTC offer (simulated)")
+        Log.d(TAG, "🔄 Creating WebRTC offer - signaling will be sent via Bluetooth")
         
         onLocalDescriptionReady = onLocalDescription
         onIceCandidateReady = onIceCandidate
         
-        // Simulate offer creation
+        // Simulate WebRTC offer creation (to be replaced with real WebRTC)
         CoroutineScope(Dispatchers.Main).launch {
             delay(500)
             val simulatedOffer = "v=0\r\no=- 1234567890 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+            Log.d(TAG, "📤 Sending offer via Bluetooth signaling")
             onLocalDescription(simulatedOffer)
             
             delay(200)
             val simulatedCandidate = "candidate:1 1 UDP 2113667326 192.168.1.100 54400 typ host"
+            Log.d(TAG, "📤 Sending ICE candidate via Bluetooth signaling")
             onIceCandidate(simulatedCandidate)
             
             _connectionState.value = WebRTCConnectionState.CONNECTING
@@ -81,19 +83,21 @@ class WebRTCManager(
         onLocalDescription: (String) -> Unit,
         onIceCandidate: (String) -> Unit
     ) {
-        Log.d(TAG, "createAnswer: Creating WebRTC answer (simulated)")
+        Log.d(TAG, "🔄 Creating WebRTC answer - signaling will be sent via Bluetooth")
         
         onLocalDescriptionReady = onLocalDescription
         onIceCandidateReady = onIceCandidate
         
-        // Simulate answer creation
+        // Simulate WebRTC answer creation (to be replaced with real WebRTC)
         CoroutineScope(Dispatchers.Main).launch {
             delay(500)
             val simulatedAnswer = "v=0\r\no=- 9876543210 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+            Log.d(TAG, "📤 Sending answer via Bluetooth signaling")
             onLocalDescription(simulatedAnswer)
             
             delay(200)
             val simulatedCandidate = "candidate:1 1 UDP 2113667326 192.168.1.101 54401 typ host"
+            Log.d(TAG, "📤 Sending ICE candidate via Bluetooth signaling")
             onIceCandidate(simulatedCandidate)
             
             _connectionState.value = WebRTCConnectionState.CONNECTING
@@ -101,24 +105,26 @@ class WebRTCManager(
     }
     
     fun setRemoteAnswer(remoteAnswer: String) {
-        Log.d(TAG, "setRemoteAnswer: Setting remote answer (simulated)")
+        Log.d(TAG, "📥 Received remote answer via Bluetooth signaling")
         CoroutineScope(Dispatchers.Main).launch {
             delay(300)
+            Log.d(TAG, "🌐 WebRTC connection established - data channel opening")
             _connectionState.value = WebRTCConnectionState.CONNECTED
             _dataChannelState.value = DataChannelState.OPEN
+            dataChannelOpen = true
         }
     }
     
     fun addIceCandidate(candidateString: String) {
-        Log.d(TAG, "addIceCandidate: Adding ICE candidate (simulated): $candidateString")
-        // Simulate ICE candidate processing
+        Log.d(TAG, "📥 Received ICE candidate via Bluetooth signaling: $candidateString")
+        // Simulate ICE candidate processing (to be replaced with real WebRTC)
     }
     
     fun sendFile(fileData: ByteArray, fileName: String, onProgress: (Float) -> Unit = {}) {
-        Log.d(TAG, "sendFile: Starting file transfer for $fileName (${fileData.size} bytes)")
+        Log.d(TAG, "📤 WEBRTC FILE TRANSFER: Starting transfer for $fileName (${fileData.size} bytes)")
         
-        if (_dataChannelState.value != DataChannelState.OPEN) {
-            Log.e(TAG, "sendFile: Data channel not open")
+        if (!dataChannelOpen || _dataChannelState.value != DataChannelState.OPEN) {
+            Log.e(TAG, "❌ WebRTC data channel not open - cannot send file via WebRTC")
             return
         }
         
@@ -133,35 +139,61 @@ class WebRTCManager(
         )
         pendingTransfers[transferId] = transferState
         
-        // Simulate file transfer with progress
+        Log.d(TAG, "🚀 Sending file via WebRTC DataChannel: $fileName (${chunks.size} chunks)")
+        
+        // Simulate WebRTC DataChannel file transfer with progress
         CoroutineScope(Dispatchers.IO).launch {
             chunks.forEachIndexed { index, chunk ->
-                delay(50) // Simulate network delay
+                // Simulate WebRTC DataChannel send operation
+                delay(50) // Simulate network transmission time
                 
                 transferState.sentChunks++
                 val progress = transferState.sentChunks.toFloat() / transferState.totalChunks
-                onProgress(progress)
                 
-                Log.v(TAG, "sendFile: Sent chunk ${index + 1}/${chunks.size} for $fileName")
+                CoroutineScope(Dispatchers.Main).launch {
+                    onProgress(progress)
+                    updateTransferProgress(transferId, progress)
+                }
+                
+                Log.v(TAG, "📦 WebRTC chunk sent ${index + 1}/${chunks.size} for $fileName")
+                
+                // TODO: Replace with real WebRTC DataChannel.send(ByteBuffer.wrap(chunk.toByteArray()))
+                // For now, simulate by calling remote device's receiveFileChunk method
+                simulateWebRTCDataChannelSend(chunk.toByteArray(), fileName, index, chunks.size)
             }
             
-            Log.d(TAG, "sendFile: File transfer completed for $fileName")
+            Log.d(TAG, "✅ WebRTC file transfer completed for $fileName")
             pendingTransfers.remove(transferId)
-            
-            // Simulate file received on other end
-            simulateFileReceived(fileName, fileData)
         }
     }
     
-    private fun simulateFileReceived(fileName: String, fileData: ByteArray) {
-        // Simulate receiving the file on the other end (for testing)
+    private fun simulateWebRTCDataChannelSend(chunkData: ByteArray, fileName: String, chunkIndex: Int, totalChunks: Int) {
+        // TODO: Replace this simulation with real WebRTC DataChannel.send()
+        // This simulates the data being sent over WebRTC and received on the remote device
+        Log.v(TAG, "🌐 Simulating WebRTC DataChannel send: chunk $chunkIndex for $fileName")
+        
+        // In real implementation, this would be:
+        // dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(chunkData), false))
+        // And the remote device would receive it via DataChannel.Observer.onMessage()
+    }
+    
+    // This method simulates receiving file data via WebRTC DataChannel
+    // In real implementation, this would be called by DataChannel.Observer.onMessage()
+    fun receiveFileFromRemote(fileName: String, fileData: ByteArray) {
+        Log.d(TAG, "📥 WEBRTC FILE RECEIVED: $fileName from remote device (${fileData.size} bytes)")
+        
+        if (!dataChannelOpen) {
+            Log.e(TAG, "❌ WebRTC data channel not open - rejecting file reception")
+            return
+        }
+        
         CoroutineScope(Dispatchers.Main).launch {
-            delay(100)
             val receivedFile = ReceivedFile(
                 fileName = fileName,
                 data = fileData,
                 fileSize = fileData.size.toLong()
             )
+            Log.d(TAG, "📥 Emitting received file via WebRTC: $fileName")
             _receivedFiles.emit(receivedFile)
         }
     }
@@ -175,11 +207,13 @@ class WebRTCManager(
     }
     
     fun cleanup() {
-        Log.d(TAG, "cleanup: Cleaning up WebRTC resources")
+        Log.d(TAG, "🧹 Cleaning up WebRTC resources")
         try {
             pendingTransfers.clear()
             receivingFiles.clear()
+            dataChannelOpen = false
             _connectionState.value = WebRTCConnectionState.CLOSED
+            _dataChannelState.value = DataChannelState.CLOSED
         } catch (e: Exception) {
             Log.e(TAG, "cleanup: Error during cleanup", e)
         }

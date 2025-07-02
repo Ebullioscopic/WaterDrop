@@ -33,7 +33,30 @@ class ConnectionManager(
     private val fileTransferManager = FileTransferManager(context, transferItemDao)
     private val webRTCManager = WebRTCManager(context)
     companion object {
-        private const val TAG = "ConnectionManager"
+        private const val TAG = "WaterDrop_ConnectionManager"
+        private const val VERBOSE_LOGGING = true
+        
+        private fun logVerbose(message: String) {
+            if (VERBOSE_LOGGING) {
+                Log.v(TAG, "🔍 $message")
+            }
+        }
+        
+        private fun logInfo(message: String) {
+            Log.i(TAG, "ℹ️ $message")
+        }
+        
+        private fun logWarning(message: String) {
+            Log.w(TAG, "⚠️ $message")
+        }
+        
+        private fun logError(message: String, throwable: Throwable? = null) {
+            Log.e(TAG, "❌ $message", throwable)
+        }
+        
+        private fun logSuccess(message: String) {
+            Log.d(TAG, "✅ $message")
+        }
     }
 
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -55,6 +78,29 @@ class ConnectionManager(
     
     private val _webRTCConnectionState = MutableStateFlow(WebRTCConnectionState.NEW)
     val webRTCConnectionState: StateFlow<WebRTCConnectionState> = _webRTCConnectionState.asStateFlow()
+    
+    // Helper methods to update states with logging
+    private fun updateConnectionState(newState: ConnectionState) {
+        val oldState = _connectionState.value
+        _connectionState.value = newState
+        logInfo("Connection state changed: $oldState → $newState")
+    }
+    
+    private fun updateConnectedDevice(device: DiscoveredDevice?) {
+        val oldDevice = _connectedDevice.value
+        _connectedDevice.value = device
+        if (device != null) {
+            logSuccess("Connected device updated: ${device.name} (${device.address}) - Signal: ${device.rssi}dBm")
+        } else {
+            logInfo("Connected device cleared (was: ${oldDevice?.name})")
+        }
+    }
+    
+    private fun updateWebRTCState(newState: WebRTCConnectionState) {
+        val oldState = _webRTCConnectionState.value
+        _webRTCConnectionState.value = newState
+        logInfo("WebRTC state changed: $oldState → $newState")
+    }
 
     private val _activeTransfers = MutableStateFlow<List<ActiveTransfer>>(emptyList())
     val activeTransfers: StateFlow<List<ActiveTransfer>> = _activeTransfers.asStateFlow()
@@ -72,18 +118,25 @@ class ConnectionManager(
     private var connectionJob: Job? = null
 
     init {
-        Log.d(TAG, "init: Initializing ConnectionManager")
+        logInfo("🚀 Initializing ConnectionManager")
+        logInfo("📱 Android Version: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+        logInfo("📦 Package: ${context.packageName}")
+        
         try {
             // Monitor Bluetooth state
             scope.launch {
-                Log.d(TAG, "init: Starting Bluetooth state monitoring")
+                logVerbose("Starting Bluetooth state monitoring coroutine")
                 while (isActive) {
                     val wasEnabled = _isBluetoothEnabled.value
                     val isEnabled = bluetoothManager.isBluetoothEnabled()
                     _isBluetoothEnabled.value = isEnabled
                     
                     if (wasEnabled != isEnabled) {
-                        Log.d(TAG, "init: Bluetooth state changed: $isEnabled")
+                        if (isEnabled) {
+                            logSuccess("📶 Bluetooth enabled")
+                        } else {
+                            logWarning("📶 Bluetooth disabled")
+                        }
                     }
                     delay(1000)
                 }
@@ -91,6 +144,7 @@ class ConnectionManager(
             
             // Monitor WebRTC connection state
             scope.launch {
+                logVerbose("Starting WebRTC state monitoring coroutine")
                 webRTCManager.connectionState.collect { state ->
                     Log.d(TAG, "init: WebRTC connection state: $state")
                     _webRTCConnectionState.value = state
@@ -116,45 +170,50 @@ class ConnectionManager(
             }
             
             // Set up WebRTC signaling callback
+            logVerbose("Setting up WebRTC signaling callback")
             bluetoothManager.setSignalingCallback { signalingData ->
+                logInfo("📡 Received WebRTC signaling data: ${signalingData.type}")
                 handleWebRTCSignaling(signalingData)
             }
             
             // Handle received files from WebRTC
             scope.launch {
+                logVerbose("Starting WebRTC received files monitoring coroutine")
                 webRTCManager.receivedFiles.collect { receivedFile ->
+                    logInfo("📥 Received file from WebRTC: ${receivedFile.fileName} (${receivedFile.data.size} bytes)")
                     handleReceivedFile(receivedFile)
                 }
             }
             
-            Log.d(TAG, "init: ConnectionManager initialized successfully")
+            logSuccess("🎉 ConnectionManager initialized successfully")
         } catch (e: Exception) {
-            Log.e(TAG, "init: Error initializing ConnectionManager", e)
+            logError("💥 Error initializing ConnectionManager", e)
         }
     }
 
     fun startDiscovery() {
-        Log.d(TAG, "startDiscovery: Starting device discovery")
+        logInfo("🔍 Starting device discovery")
+        logVerbose("Current connection state: ${_connectionState.value}")
         
         if (_connectionState.value == ConnectionState.DISCOVERING) {
-            Log.w(TAG, "startDiscovery: Discovery already in progress, stopping first")
+            logWarning("Discovery already in progress, stopping first")
             stopDiscovery()
         }
 
         if (!bluetoothManager.hasBluetoothPermissions()) {
-            Log.e(TAG, "startDiscovery: Bluetooth permissions not granted")
+            logError("Bluetooth permissions not granted")
             _errorMessage.value = "Bluetooth permissions are required"
             return
         }
 
         if (!bluetoothManager.isBluetoothEnabled()) {
-            Log.e(TAG, "startDiscovery: Bluetooth not enabled")
+            logError("Bluetooth not enabled")
             _errorMessage.value = "Bluetooth is not enabled"
             return
         }
 
-        Log.d(TAG, "startDiscovery: Prerequisites met, starting discovery and advertising")
-        _connectionState.value = ConnectionState.DISCOVERING
+        logSuccess("Prerequisites met - starting discovery and advertising")
+        updateConnectionState(ConnectionState.DISCOVERING)
         _discoveredDevices.value = emptyList()
         clearError()
 
@@ -234,11 +293,11 @@ class ConnectionManager(
     }
 
     fun connectToDevice(device: DiscoveredDevice) {
-        Log.d(TAG, "connectToDevice: Attempting to connect to device: ${device.name} (${device.address})")
+        logInfo("🤝 Attempting to connect to device: ${device.name} (${device.address}) - Signal: ${device.rssi}dBm")
         
         if (_connectionState.value == ConnectionState.CONNECTING ||
             _connectionState.value == ConnectionState.CONNECTED) {
-            Log.w(TAG, "connectToDevice: Already connecting or connected, current state: ${_connectionState.value}")
+            logWarning("Already connecting or connected, current state: ${_connectionState.value}")
             return
         }
 
@@ -302,36 +361,47 @@ class ConnectionManager(
     }
 
     fun sendFiles(uris: List<Uri>) {
-        Log.d(TAG, "sendFiles: Attempting to send ${uris.size} files via WebRTC")
+        logInfo("📤 Attempting to send ${uris.size} files via WebRTC")
+        
+        // Log file URIs for debugging
+        uris.forEachIndexed { index, uri ->
+            logVerbose("File $index: $uri")
+        }
         
         val device = _connectedDevice.value
         if (device == null) {
-            Log.e(TAG, "sendFiles: No device connected")
+            logError("No device connected for file transfer")
             _errorMessage.value = "No device connected"
             return
         }
 
+        logInfo("📱 Connected device: ${device.name} (${device.address}) - Signal: ${device.rssi}dBm")
+
         if (_webRTCConnectionState.value != WebRTCConnectionState.CONNECTED) {
-            Log.e(TAG, "sendFiles: WebRTC not connected, current state: ${_webRTCConnectionState.value}")
+            logError("WebRTC not connected, current state: ${_webRTCConnectionState.value}")
             _errorMessage.value = "WebRTC connection not established"
             return
         }
 
-        Log.d(TAG, "sendFiles: Starting WebRTC file transfer to ${device.name}")
-        _connectionState.value = ConnectionState.TRANSFERRING
+        logSuccess("🚀 Starting WebRTC file transfer to ${device.name}")
+        updateConnectionState(ConnectionState.TRANSFERRING)
         clearError()
 
         scope.launch(Dispatchers.IO) {
             try {
-                uris.forEach { uri ->
+                logInfo("🔄 Processing ${uris.size} files for transfer")
+                uris.forEachIndexed { index, uri ->
+                    logVerbose("Processing file ${index + 1}/${uris.size}: $uri")
                     val fileName = getFileName(uri)
                     val fileData = readFileData(uri)
                     
                     if (fileData != null) {
-                        Log.d(TAG, "sendFiles: Sending $fileName (${fileData.size} bytes) via WebRTC")
+                        logInfo("📋 File details: $fileName (${fileData.size} bytes)")
                         
                         // Create and add active transfer
                         val transferId = UUID.randomUUID().toString()
+                        logVerbose("Generated transfer ID: $transferId")
+                        
                         val activeTransfer = ActiveTransfer(
                             id = transferId,
                             fileName = fileName,
@@ -340,15 +410,18 @@ class ConnectionManager(
                             isIncoming = false
                         )
                         
+                        logVerbose("Adding active transfer to UI state")
                         scope.launch(Dispatchers.Main) {
                             _activeTransfers.value = _activeTransfers.value + activeTransfer
                         }
                         
+                        logInfo("📡 Initiating WebRTC file send for: $fileName")
                         webRTCManager.sendFile(
                             fileData = fileData,
                             fileName = fileName,
                             onProgress = { progress ->
-                                Log.d(TAG, "sendFiles: Transfer progress for $fileName: ${(progress * 100).toInt()}%")
+                                val progressPercent = (progress * 100).toInt()
+                                logVerbose("📊 Transfer progress for $fileName: $progressPercent%")
                                 
                                 // Update active transfer progress on main thread
                                 scope.launch(Dispatchers.Main) {
@@ -358,23 +431,33 @@ class ConnectionManager(
                                         } else transfer
                                     }
                                     _activeTransfers.value = updated
+                                    logVerbose("🔄 Updated UI progress for $fileName to $progressPercent%")
                                 }
                             }
                         )
                         
+                        logSuccess("✅ File sent successfully: $fileName")
+                        
                         // Mark transfer as complete and remove from active transfers
                         scope.launch(Dispatchers.Main) {
                             _activeTransfers.value = _activeTransfers.value.filter { it.id != transferId }
+                            logVerbose("🗑️ Removed completed transfer from active list: $fileName")
                         }
                         
-                        // Save to transfer history
+                        // Calculate checksum and save to transfer history
+                        val checksum = calculateSHA256(fileData)
+                        logVerbose("🔐 File checksum calculated: $checksum")
+                        
+                        val filePath = getExternalFilePath(fileName)
+                        logInfo("💾 Saving transfer history - File: $fileName, Size: ${fileData.size}, Path: $filePath")
+                        
                         val transferItem = TransferItem(
                             fileName = fileName,
                             fileSize = fileData.size.toLong(),
                             transferDate = java.util.Date(),
                             isIncoming = false,
-                            checksum = calculateSHA256(fileData),
-                            filePath = getExternalFilePath(fileName)
+                            checksum = checksum,
+                            filePath = filePath
                         )
                         transferItemDao.insertTransferItem(transferItem)
                         
@@ -582,19 +665,35 @@ class ConnectionManager(
     
     private fun getExternalFilePath(fileName: String): String {
         val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-        return File(downloadsDir, fileName).absolutePath
+        val filePath = File(downloadsDir, fileName).absolutePath
+        logVerbose("📂 Generated file path: $filePath")
+        return filePath
     }
     
     private fun handleReceivedFile(receivedFile: com.karthikinformationtechnology.waterdrop.webrtc.ReceivedFile) {
-        Log.d(TAG, "handleReceivedFile: Received ${receivedFile.fileName} (${receivedFile.fileSize} bytes)")
+        logInfo("📥 Handling received file: ${receivedFile.fileName} (${receivedFile.fileSize} bytes)")
         
         scope.launch(Dispatchers.IO) {
             try {
                 // Save file to Downloads directory
                 val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
+                logVerbose("📁 Downloads directory: ${downloadsDir?.absolutePath}")
+                
                 if (downloadsDir != null) {
+                    if (!downloadsDir.exists()) {
+                        val created = downloadsDir.mkdirs()
+                        logInfo("📁 Created downloads directory: $created")
+                    }
+                    
                     val file = File(downloadsDir, receivedFile.fileName)
+                    logInfo("💾 Saving file to: ${file.absolutePath}")
+                    
                     file.writeBytes(receivedFile.data)
+                    logSuccess("✅ File saved successfully: ${file.absolutePath} (${file.length()} bytes)")
+                    
+                    // Verify file integrity
+                    val savedChecksum = calculateSHA256(receivedFile.data)
+                    logVerbose("🔐 File checksum: $savedChecksum")
                     
                     // Add to transfer history
                     val transferItem = TransferItem(

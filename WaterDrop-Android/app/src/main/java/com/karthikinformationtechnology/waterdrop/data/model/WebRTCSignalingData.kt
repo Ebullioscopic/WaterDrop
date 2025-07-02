@@ -4,6 +4,7 @@ import java.util.*
 
 /**
  * WebRTC Signaling data model for exchanging connection information over Bluetooth
+ * IMPORTANT: Only signaling data should be sent via Bluetooth, not file data
  */
 data class WebRTCSignalingData(
     val deviceId: String = UUID.randomUUID().toString(),

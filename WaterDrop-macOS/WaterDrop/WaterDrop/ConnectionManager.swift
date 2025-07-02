@@ -71,30 +71,6 @@ class ConnectionManager: NSObject, ObservableObject {
             .assign(to: \.connectedDevice, on: self)
             .store(in: &cancellables)
         
-        // Bind Bluetooth connection state
-        bluetoothManager.$connectionState
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] bluetoothState in
-                guard let self = self else { return }
-                
-                switch bluetoothState {
-                case .discovering:
-                    self.connectionState = .discovering
-                case .connecting:
-                    self.connectionState = .connecting
-                case .connected:
-                    // Only update to connected if WebRTC is not the primary connection method
-                    if self.webRTCConnectionState == .new {
-                        self.connectionState = .connected
-                    }
-                case .disconnected:
-                    if self.webRTCConnectionState != .connected {
-                        self.connectionState = .disconnected
-                    }
-                }
-            }
-            .store(in: &cancellables)
-        
         // Bind WebRTC state
         webRTCManager.$connectionState
             .receive(on: DispatchQueue.main)
@@ -159,7 +135,7 @@ class ConnectionManager: NSObject, ObservableObject {
     }
     
     func connectToDevice(_ device: DiscoveredDevice) {
-        logger.info("🔗 Connecting to device: \(device.name)")
+        logger.info("🔗 Connecting to device: \(device.name) (\(device.identifier))")
         connectionState = .connecting
         bluetoothManager.connectToDevice(device)
     }
@@ -272,11 +248,6 @@ class ConnectionManager: NSObject, ObservableObject {
                             filePath: url.path
                         )
                         self.transferHistory.append(historyItem)
-                        
-                        // Remove from active transfers after a delay
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            self.activeTransfers.removeAll { $0.id == transfer.id }
-                        }
                         
                         // Check if all transfers are done
                         if self.activeTransfers.allSatisfy({ $0.status == .completed || $0.status == .failed }) {

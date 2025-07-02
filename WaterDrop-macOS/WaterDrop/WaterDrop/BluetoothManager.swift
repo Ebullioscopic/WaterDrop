@@ -110,13 +110,17 @@ class BluetoothManager: NSObject, ObservableObject {
     }
     
     func sendWebRTCSignaling(_ signalingData: WebRTCSignalingData) {
-        //logger.info("📡 Sending WebRTC signaling: \(signalingData.type)")
+        logger.info("📡 Sending WebRTC signaling: \(signalingData.type.rawValue)")
         
         guard let peripheral = connectedPeripheral,
-              let characteristic = targetCharacteristic,
-              let jsonString = signalingData.toJsonString(),
+              let characteristic = targetCharacteristic else {
+            logger.error("❌ Cannot send signaling - missing connection")
+            return
+        }
+        
+        guard let jsonString = signalingData.toJsonString(),
               let data = jsonString.data(using: .utf8) else {
-            logger.error("❌ Cannot send signaling - missing connection or data")
+            logger.error("❌ Cannot send signaling - failed to serialize data")
             return
         }
         
@@ -126,13 +130,17 @@ class BluetoothManager: NSObject, ObservableObject {
     
     // MARK: - Private Methods
     private func handleReceivedSignalingData(_ data: Data) {
-        guard let jsonString = String(data: data, encoding: .utf8),
-              let signalingData = WebRTCSignalingData.fromJsonString(jsonString) else {
-            logger.error("❌ Failed to parse signaling data")
+        guard let jsonString = String(data: data, encoding: .utf8) else {
+            logger.error("❌ Failed to parse signaling data - invalid UTF8")
             return
         }
         
-        //logger.info("📨 Received WebRTC signaling: \(signalingData.type)")
+        guard let signalingData = WebRTCSignalingData.fromJsonString(jsonString) else {
+            logger.error("❌ Failed to parse signaling data - invalid JSON")
+            return
+        }
+        
+        logger.info("📨 Received WebRTC signaling: \(signalingData.type.rawValue)")
         signalingCallback?(signalingData)
     }
 }

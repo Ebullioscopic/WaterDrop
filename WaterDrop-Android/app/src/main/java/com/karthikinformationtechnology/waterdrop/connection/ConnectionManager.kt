@@ -318,15 +318,23 @@ class ConnectionManager(
                     }
                     .collect { isConnected ->
                         if (isConnected) {
-                            _connectionState.value = ConnectionState.CONNECTED
-                            Log.d(TAG, "connectToDevice: Successfully connected to device: ${device.name}")
+                            logSuccess("✅ BLUETOOTH CONNECTION: Successfully connected to device: ${device.name}")
+                            updateConnectionState(ConnectionState.CONNECTED)
+                            updateConnectedDevice(device)
                             
                             // Stop discovery once connected
                             stopDiscovery()
+                            
+                            // Add small delay to ensure Bluetooth handshake completes
+                            delay(1000)
+                            
+                            // IMPORTANT: Initiate WebRTC connection after Bluetooth connects
+                            logInfo("🔄 BLUETOOTH CONNECTION: Starting WebRTC signaling process")
+                            initiateWebRTCConnection(device)
                         } else {
-                            _connectionState.value = ConnectionState.DISCONNECTED
-                            _connectedDevice.value = null
-                            Log.d(TAG, "connectToDevice: Disconnected from device: ${device.name}")
+                            logInfo("🔌 BLUETOOTH CONNECTION: Disconnected from device: ${device.name}")
+                            updateConnectionState(ConnectionState.DISCONNECTED)
+                            updateConnectedDevice(null)
                         }
                     }
             } catch (e: Exception) {
@@ -583,16 +591,19 @@ class ConnectionManager(
     
     // WebRTC Signaling Handler
     private fun handleWebRTCSignaling(signalingData: WebRTCSignalingData) {
-        Log.d(TAG, "handleWebRTCSignaling: Received ${signalingData.type} from ${signalingData.deviceName}")
+        logInfo("📨 WEBRTC SIGNALING: Handling signaling type: ${signalingData.type}")
+        logInfo("📨 WEBRTC SIGNALING: From device: ${signalingData.deviceName} (${signalingData.deviceId})")
         
         when (signalingData.type) {
             WebRTCSignalingData.SignalingType.OFFER -> {
-                Log.d(TAG, "handleWebRTCSignaling: Processing WebRTC offer")
+                logInfo("📨 WEBRTC SIGNALING: Processing incoming offer")
                 signalingData.sdp?.let { sdp ->
+                    logVerbose("📨 WEBRTC SIGNALING: Offer SDP: $sdp")
                     webRTCManager.createAnswer(
                         remoteOffer = sdp,
                         onLocalDescription = { answerSdp ->
-                            Log.d(TAG, "handleWebRTCSignaling: WebRTC answer created, sending back")
+                            logInfo("📤 WEBRTC SIGNALING: Answer created, sending back")
+                            logVerbose("📤 WEBRTC SIGNALING: Answer SDP: $answerSdp")
                             val answerSignaling = WebRTCSignalingData(
                                 deviceName = android.os.Build.MODEL ?: "Android Device",
                                 type = WebRTCSignalingData.SignalingType.ANSWER,
@@ -604,7 +615,8 @@ class ConnectionManager(
                             }
                         },
                         onIceCandidate = { candidate ->
-                            Log.d(TAG, "handleWebRTCSignaling: ICE candidate ready, sending back")
+                            logInfo("📤 WEBRTC SIGNALING: ICE candidate ready, sending back")
+                            logVerbose("📤 WEBRTC SIGNALING: ICE candidate: $candidate")
                             val candidateSignaling = WebRTCSignalingData(
                                 deviceName = android.os.Build.MODEL ?: "Android Device",
                                 type = WebRTCSignalingData.SignalingType.ICE_CANDIDATE,
@@ -619,15 +631,17 @@ class ConnectionManager(
             }
             
             WebRTCSignalingData.SignalingType.ANSWER -> {
-                Log.d(TAG, "handleWebRTCSignaling: Processing WebRTC answer")
+                logInfo("📨 WEBRTC SIGNALING: Processing incoming answer")
                 signalingData.sdp?.let { sdp ->
+                    logVerbose("📨 WEBRTC SIGNALING: Answer SDP: $sdp")
                     webRTCManager.setRemoteAnswer(sdp)
                 }
             }
             
             WebRTCSignalingData.SignalingType.ICE_CANDIDATE -> {
-                Log.d(TAG, "handleWebRTCSignaling: Processing ICE candidate")
+                logInfo("📨 WEBRTC SIGNALING: Processing incoming ICE candidate")
                 signalingData.iceCandidate?.let { candidate ->
+                    logVerbose("📨 WEBRTC SIGNALING: ICE candidate: $candidate")
                     webRTCManager.addIceCandidate(candidate)
                 }
             }
@@ -642,6 +656,40 @@ class ConnectionManager(
             rssi >= -70 -> "Fair"
             rssi >= -80 -> "Weak"
             else -> "Poor"
+        }
+    }
+    
+    // New method to initiate WebRTC connection
+    private fun initiateWebRTCConnection(device: DiscoveredDevice) {
+        logInfo("🌐 WEBRTC INITIATION: Starting WebRTC connection process")
+        logInfo("🌐 WEBRTC INITIATION: Target device: ${device.name} (${device.address})")
+        
+        try {
+            // Create WebRTC offer
+            webRTCManager.createOffer(
+                onLocalDescription = { offerSdp ->
+                    logInfo("� WEBRTC INITIATION: Offer created, sending via Bluetooth signaling")
+                    logVerbose("📤 WEBRTC INITIATION: Offer SDP: $offerSdp")
+                    val offerData = WebRTCSignalingData(
+                        deviceName = android.os.Build.MODEL ?: "Android Device",
+                        type = WebRTCSignalingData.SignalingType.OFFER,
+                        sdp = offerSdp
+                    )
+                    bluetoothManager.sendWebRTCSignaling(device, offerData)
+                },
+                onIceCandidate = { candidate ->
+                    logInfo("📤 WEBRTC INITIATION: ICE candidate ready, sending via Bluetooth signaling")
+                    logVerbose("📤 WEBRTC INITIATION: ICE candidate: $candidate")
+                    val candidateData = WebRTCSignalingData(
+                        deviceName = android.os.Build.MODEL ?: "Android Device",
+                        type = WebRTCSignalingData.SignalingType.ICE_CANDIDATE,
+                        iceCandidate = candidate
+                    )
+                    bluetoothManager.sendWebRTCSignaling(device, candidateData)
+                }
+            )
+        } catch (e: Exception) {
+            logError("❌ WEBRTC INITIATION: Failed to initiate WebRTC connection", e)
         }
     }
 

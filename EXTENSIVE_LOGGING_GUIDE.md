@@ -194,6 +194,54 @@ Look for these log patterns:
 
 ## Troubleshooting Steps
 
+### If WebRTC Connection Fails
+Look for these patterns in the logs:
+
+**Android:**
+```
+🔗 Connected to device: DeviceName (MAC) - Signal: -XdBm
+🌐 Initiating WebRTC connection to DeviceName
+🔄 WebRTC offer created, sending via Bluetooth signaling
+```
+
+**macOS:**
+```
+� BLUETOOTH HANDSHAKE: Connected to peripheral: DeviceName
+📱 BLUETOOTH HANDSHAKE: Peripheral ID: UUID
+🔧 BLUETOOTH HANDSHAKE: Starting service discovery for WebRTC signaling
+✅ BLUETOOTH HANDSHAKE: Device connection state updated to connected
+📋 BLUETOOTH HANDSHAKE: Connected device details - Name: DeviceName, ID: UUID
+🔍 BLUETOOTH HANDSHAKE: Service discovery completed
+✅ BLUETOOTH HANDSHAKE: Found WaterDrop service, discovering characteristics
+🔍 BLUETOOTH HANDSHAKE: Characteristic discovery completed for service
+✅ BLUETOOTH HANDSHAKE: Found WebRTC signaling characteristic
+🔔 BLUETOOTH HANDSHAKE: Enabled notifications for WebRTC signaling
+🎉 BLUETOOTH HANDSHAKE: Complete - ready for WebRTC signaling exchange
+�📲 Device connected via Bluetooth, initiating WebRTC connection
+🌐 WEBRTC INITIATION: Starting WebRTC connection process
+🌐 WEBRTC INITIATION: Creating offer for device: DeviceName
+� WEBRTC INITIATION: Offer created, sending via Bluetooth
+📡 BLUETOOTH SIGNALING: Sending WebRTC signaling type: OFFER
+📡 BLUETOOTH SIGNALING: To device: DeviceName
+✅ BLUETOOTH SIGNALING: Data sent successfully
+📨 BLUETOOTH SIGNALING: Received data notification
+📨 BLUETOOTH SIGNALING: Received X bytes of WebRTC signaling data
+📨 WEBRTC SIGNALING: Successfully parsed ANSWER from deviceId
+📨 WEBRTC SIGNALING: Forwarding to ConnectionManager for processing
+📨 WEBRTC SIGNALING: Processing incoming answer
+📥 WEBRTC CONNECTION: Received remote answer via Bluetooth signaling
+🌐 WEBRTC CONNECTION: WebRTC connection established successfully!
+📊 WEBRTC CONNECTION: Data channel opening for file transfers
+✅ WEBRTC CONNECTION: Ready for file transfers via DataChannel
+```
+
+If you don't see these logs, it means the WebRTC signaling process isn't being initiated after Bluetooth connection.
+
+Common issues:
+1. Bluetooth connection successful but WebRTC not initiated
+2. WebRTC signaling messages not being sent properly
+3. WebRTC signaling messages received but not processed
+
 ### If No Logs Appear (Android)
 1. **Check USB Debugging**: Enable Developer Options > USB Debugging
 2. **Check ADB Connection**: `adb devices` should show your device

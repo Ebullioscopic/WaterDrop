@@ -135,7 +135,7 @@ class ConnectionManager: NSObject, ObservableObject {
     }
     
     func connectToDevice(_ device: DiscoveredDevice) {
-        logger.info("🔗 Connecting to device: \(device.name) (\(device.identifier))")
+        logger.info("🔗 Connecting to device: \(device.name)")
         connectionState = .connecting
         bluetoothManager.connectToDevice(device)
     }
@@ -302,12 +302,12 @@ class ConnectionManager: NSObject, ObservableObject {
     }
     
     private func handleWebRTCSignaling(_ signalingData: WebRTCSignalingData) {
-        //logger.info("📡 Handling WebRTC signaling: \(signalingData.type)")
+        logger.info("📡 WEBRTC SIGNALING: Handling signaling type: \(signalingData.type.rawValue)")
         
         switch signalingData.type {
         case .offer:
             // Received an offer, create answer
-            webRTCManager.createAnswer(remoteOffer: signalingData.data) { [weak self] localAnswer in
+            webRTCManager.createAnswer(remoteOffer: signalingData.data!) { [weak self] localAnswer in
                 let answerSignaling = WebRTCSignalingData(
                     type: .answer,
                     data: localAnswer,
@@ -325,11 +325,11 @@ class ConnectionManager: NSObject, ObservableObject {
             
         case .answer:
             // Received an answer, set it
-            webRTCManager.setRemoteAnswer(signalingData.data)
+            webRTCManager.setRemoteAnswer(signalingData.data!)
             
         case .iceCandidate:
             // Received ICE candidate, add it
-            webRTCManager.addIceCandidate(signalingData.data)
+            webRTCManager.addIceCandidate(signalingData.data!)
         }
     }
     

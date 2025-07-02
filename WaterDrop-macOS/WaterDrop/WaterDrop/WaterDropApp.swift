@@ -10,9 +10,11 @@ import SwiftData
 
 @main
 struct WaterDropApp: App {
+    @StateObject private var connectionManager = ConnectionManager()
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            TransferItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -26,7 +28,11 @@ struct WaterDropApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(connectionManager)
+                .preferredColorScheme(.dark)
         }
         .modelContainer(sharedModelContainer)
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
     }
 }

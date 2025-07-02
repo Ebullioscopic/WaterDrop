@@ -51,6 +51,7 @@ class WaterDropBluetoothManager(
     
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
+            Log.d(TAG, "onScanResult: Device found - ${result.device.address}, RSSI: ${result.rssi}")
             val device = result.device
             val rssi = result.rssi
             
@@ -68,23 +69,36 @@ class WaterDropBluetoothManager(
                     services = result.scanRecord?.serviceUuids?.map { it.toString() } ?: emptyList()
                 )
                 
+                Log.d(TAG, "onScanResult: Added device - ${deviceInfo.name} (${deviceInfo.address})")
                 discoveredDevices[device.address] = deviceInfo
                 currentChannelCallback?.invoke(discoveredDevices.values.toList())
+            } else {
+                Log.w(TAG, "onScanResult: Missing BLUETOOTH_CONNECT permission")
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.e(TAG, "Scan failed with error code: $errorCode")
+            val errorMessage = when (errorCode) {
+                SCAN_FAILED_ALREADY_STARTED -> "Scan already started"
+                SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "Application registration failed"
+                SCAN_FAILED_FEATURE_UNSUPPORTED -> "Feature unsupported"
+                SCAN_FAILED_INTERNAL_ERROR -> "Internal error"
+                SCAN_FAILED_OUT_OF_HARDWARE_RESOURCES -> "Out of hardware resources"
+                else -> "Unknown error ($errorCode)"
+            }
+            Log.e(TAG, "onScanFailed: Scan failed - $errorMessage")
             isScanning = false
         }
     }
 
     fun isBluetoothEnabled(): Boolean {
-        return bluetoothAdapter?.isEnabled == true
+        val enabled = bluetoothAdapter?.isEnabled == true
+        Log.d(TAG, "isBluetoothEnabled: $enabled")
+        return enabled
     }
 
     fun hasBluetoothPermissions(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val hasPerms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             hasPermission(Manifest.permission.BLUETOOTH_SCAN) &&
             hasPermission(Manifest.permission.BLUETOOTH_ADVERTISE) &&
             hasPermission(Manifest.permission.BLUETOOTH_CONNECT)
@@ -93,6 +107,8 @@ class WaterDropBluetoothManager(
             hasPermission(Manifest.permission.BLUETOOTH_ADMIN) &&
             hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
         }
+        Log.d(TAG, "hasBluetoothPermissions: $hasPerms (API ${Build.VERSION.SDK_INT})")
+        return hasPerms
     }
 
     private fun hasPermission(permission: String): Boolean {
@@ -100,51 +116,68 @@ class WaterDropBluetoothManager(
     }
 
     fun startDiscovery(): Flow<List<DiscoveredDevice>> = callbackFlow {
+        Log.d(TAG, "startDiscovery: Starting Bluetooth LE scan")
+        
         if (!isBluetoothEnabled() || !hasBluetoothPermissions()) {
+            Log.e(TAG, "startDiscovery: Bluetooth not available or permissions missing")
             close(IllegalStateException("Bluetooth not available or permissions missing"))
             return@callbackFlow
         }
 
-        bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-        
-        currentChannelCallback = { devices ->
-            trySend(devices)
-        }
+        try {
+            bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
+            Log.d(TAG, "startDiscovery: Got Bluetooth LE scanner")
+            
+            currentChannelCallback = { devices ->
+                Log.v(TAG, "startDiscovery: Sending ${devices.size} devices to flow")
+                trySend(devices)
+            }
 
-        val scanFilter = ScanFilter.Builder()
-            .setServiceUuid(ParcelUuid(SERVICE_UUID))
-            .build()
+            val scanFilter = ScanFilter.Builder()
+                .setServiceUuid(ParcelUuid(SERVICE_UUID))
+                .build()
 
-        val scanSettings = ScanSettings.Builder()
-            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-            .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
-            .build()
+            val scanSettings = ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setCallbackType(ScanSettings.CALLBACK_TYPE_ALL_MATCHES)
+                .build()
 
-        if (ActivityCompat.checkSelfPermission(
-                context,
-                Manifest.permission.BLUETOOTH_SCAN
-            ) == PackageManager.PERMISSION_GRANTED
-        ) {
-            bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
-            isScanning = true
-            Log.d(TAG, "Started Bluetooth LE scan")
-        }
-
-        awaitClose {
-            if (isScanning && ActivityCompat.checkSelfPermission(
+            if (ActivityCompat.checkSelfPermission(
                     context,
                     Manifest.permission.BLUETOOTH_SCAN
                 ) == PackageManager.PERMISSION_GRANTED
             ) {
-                bluetoothLeScanner?.stopScan(scanCallback as ScanCallback)
-                isScanning = false
-                Log.d(TAG, "Stopped Bluetooth LE scan")
+                Log.d(TAG, "startDiscovery: Starting BLE scan with service UUID: $SERVICE_UUID")
+                bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
+                isScanning = true
+                Log.d(TAG, "startDiscovery: Bluetooth LE scan started successfully")
+            } else {
+                Log.e(TAG, "startDiscovery: Missing BLUETOOTH_SCAN permission")
             }
+
+            awaitClose {
+                Log.d(TAG, "startDiscovery: Closing scan flow")
+                if (isScanning && ActivityCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.BLUETOOTH_SCAN
+                    ) == PackageManager.PERMISSION_GRANTED
+                ) {
+                    bluetoothLeScanner?.stopScan(scanCallback as ScanCallback)
+                    isScanning = false
+                    Log.d(TAG, "startDiscovery: Stopped Bluetooth LE scan")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "startDiscovery: Error during scan setup", e)
+            close(e)
         }
     }
 
     fun startAdvertising(): Flow<Boolean> = callbackFlow {
+        Log.d(TAG, "startAdvertising: Starting Bluetooth LE advertising")
+        
         if (!isBluetoothEnabled() || !hasBluetoothPermissions()) {
+            Log.e(TAG, "startAdvertising: Bluetooth not available or permissions missing")
             close(IllegalStateException("Bluetooth not available or permissions missing"))
             return@callbackFlow
         }

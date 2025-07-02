@@ -7,29 +7,45 @@
 
 import SwiftUI
 import SwiftData
+import os.log
 
 @main
 struct WaterDropApp: App {
+    private let logger = Logger(subsystem: "com.waterdrop.app", category: "WaterDropApp")
     @StateObject private var connectionManager = ConnectionManager()
     
     var sharedModelContainer: ModelContainer = {
+        let logger = Logger(subsystem: "com.waterdrop.app", category: "ModelContainer")
+        logger.info("🗄️ Creating ModelContainer...")
+        
         let schema = Schema([
             TransferItem.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            let container = try ModelContainer(for: schema, configurations: [modelConfiguration])
+            logger.info("✅ ModelContainer created successfully")
+            return container
         } catch {
+            logger.error("❌ Could not create ModelContainer: \(error)")
             fatalError("Could not create ModelContainer: \(error)")
         }
     }()
 
     var body: some Scene {
-        WindowGroup {
+        logger.info("🎬 WaterDropApp body rendering...")
+        
+        return WindowGroup {
             ContentView()
                 .environmentObject(connectionManager)
                 .preferredColorScheme(.dark)
+                .onAppear {
+                    logger.info("📱 ContentView appeared")
+                }
+                .onDisappear {
+                    logger.info("📱 ContentView disappeared")
+                }
         }
         .modelContainer(sharedModelContainer)
         .windowStyle(.hiddenTitleBar)

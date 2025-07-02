@@ -7,8 +7,10 @@
 
 import SwiftUI
 import UniformTypeIdentifiers
+import os.log
 
 struct ContentView: View {
+    private let logger = Logger(subsystem: "com.waterdrop.app", category: "ContentView")
     @EnvironmentObject var connectionManager: ConnectionManager
     @State private var showingFilePicker = false
     @State private var selectedFiles: [URL] = []
@@ -80,23 +82,45 @@ struct ContentView: View {
             allowedContentTypes: [.item],
             allowsMultipleSelection: true
         ) { result in
+            logger.info("📂 File picker result received")
             switch result {
             case .success(let urls):
+                logger.info("✅ Files selected: \(urls.count) files")
                 selectedFiles = urls
             case .failure(let error):
+                logger.error("❌ File picker failed: \(error.localizedDescription)")
                 connectionManager.errorMessage = error.localizedDescription
             }
         }
         .sheet(isPresented: $showingTransferHistory) {
             TransferHistoryView()
                 .environmentObject(connectionManager)
+                .onAppear {
+                    logger.info("📊 Showing transfer history sheet")
+                }
         }
         .alert("Error", isPresented: .constant(connectionManager.errorMessage != nil)) {
             Button("OK") {
+                logger.debug("❌ Error alert dismissed")
                 connectionManager.errorMessage = nil
             }
         } message: {
             Text(connectionManager.errorMessage ?? "")
+        }
+        .onReceive(connectionManager.$connectionState) { newState in
+            logger.info("🔄 Connection state changed to: \(String(describing: newState))")
+        }
+        .onReceive(connectionManager.$activeTransfers) { transfers in
+            logger.debug("📁 Active transfers count: \(transfers.count)")
+        }
+        .onReceive(connectionManager.$discoveredDevices) { devices in
+            logger.debug("📱 Discovered devices count: \(devices.count)")
+        }
+        .onAppear {
+            logger.info("📱 ContentView appeared")
+        }
+        .onDisappear {
+            logger.info("📱 ContentView disappeared")
         }
     }
     

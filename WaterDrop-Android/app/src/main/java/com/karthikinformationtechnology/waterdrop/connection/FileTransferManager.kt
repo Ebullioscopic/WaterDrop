@@ -18,7 +18,7 @@ import java.util.*
 // @Singleton
 class FileTransferManager(
     private val context: Context,
-    // private val transferItemDao: TransferItemDao,
+    private val transferItemDao: TransferItemDao,
     private val scope: CoroutineScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     // @Inject constructor(
 ) {
@@ -40,22 +40,33 @@ class FileTransferManager(
         onProgress: (String, Float) -> Unit = { _, _ -> },
         onComplete: (String, Boolean, String?) -> Unit = { _, _, _ -> }
     ) {
-        files.forEach { uri ->
+        Log.d(TAG, "sendFiles: Starting transfer of ${files.size} files to $deviceName")
+        
+        files.forEachIndexed { index, uri ->
             val transferId = UUID.randomUUID().toString()
             val fileName = getFileName(uri)
+            Log.d(TAG, "sendFiles: Queuing file ${index + 1}/${files.size} - $fileName (ID: $transferId)")
             
             val job = scope.launch {
-                transferSemaphore.acquire()
                 try {
+                    Log.d(TAG, "sendFiles: Acquiring transfer semaphore for $fileName")
+                    transferSemaphore.acquire()
+                    Log.d(TAG, "sendFiles: Starting transfer for $fileName")
                     sendFile(transferId, uri, fileName, deviceName, onProgress, onComplete)
+                } catch (e: Exception) {
+                    Log.e(TAG, "sendFiles: Error transferring $fileName", e)
+                    onComplete(fileName, false, "Transfer error: ${e.message}")
                 } finally {
+                    Log.d(TAG, "sendFiles: Releasing transfer semaphore for $fileName")
                     transferSemaphore.release()
                     activeJobs.remove(transferId)
+                    Log.d(TAG, "sendFiles: Completed transfer cleanup for $fileName")
                 }
             }
             
             activeJobs[transferId] = job
         }
+        Log.d(TAG, "sendFiles: All transfer jobs queued")
     }
 
     private suspend fun sendFile(
@@ -66,12 +77,17 @@ class FileTransferManager(
         onProgress: (String, Float) -> Unit,
         onComplete: (String, Boolean, String?) -> Unit
     ) {
+        Log.d(TAG, "sendFile: Starting transfer - $fileName to $deviceName")
         try {
             val inputStream = context.contentResolver.openInputStream(uri)
                 ?: throw IOException("Cannot open file input stream")
+            Log.d(TAG, "sendFile: Opened input stream for $fileName")
 
             val fileSize = getFileSize(uri)
+            Log.d(TAG, "sendFile: File size for $fileName: ${formatFileSize(fileSize)}")
+            
             val checksum = calculateChecksum(uri)
+            Log.d(TAG, "sendFile: Calculated checksum for $fileName: $checksum")
 
             val transfer = FileTransfer(
                 id = transferId,
@@ -84,6 +100,7 @@ class FileTransferManager(
             )
 
             updateActiveTransfer(transfer)
+            Log.d(TAG, "sendFile: Added transfer to active transfers list")
 
             inputStream.use { input ->
                 val buffer = ByteArray(CHUNK_SIZE)
@@ -124,7 +141,7 @@ class FileTransferManager(
                         filePath = uri.toString(),
                         deviceName = deviceName
                     )
-                    // transferItemDao.insertTransferItem(transferItem)
+                    transferItemDao.insertTransferItem(transferItem)
 
                     onComplete(fileName, true, null)
                     removeActiveTransfer(transferId)
@@ -244,7 +261,7 @@ class FileTransferManager(
                             filePath = outputFile.absolutePath,
                             deviceName = deviceName
                         )
-                        // transferItemDao.insertTransferItem(transferItem)
+                        transferItemDao.insertTransferItem(transferItem)
 
                         onComplete(fileName, true, null)
                         removeActiveTransfer(transferId)
@@ -274,19 +291,37 @@ class FileTransferManager(
     }
 
     fun pauseTransfer(transferId: String) {
-        activeJobs[transferId]?.cancel()
-        updateTransferStatus(transferId, FileTransfer.TransferStatus.PAUSED)
+        Log.d(TAG, "pauseTransfer: Pausing transfer $transferId")
+        try {
+            activeJobs[transferId]?.cancel()
+            updateTransferStatus(transferId, FileTransfer.TransferStatus.PAUSED)
+            Log.d(TAG, "pauseTransfer: Successfully paused transfer $transferId")
+        } catch (e: Exception) {
+            Log.e(TAG, "pauseTransfer: Error pausing transfer $transferId", e)
+        }
     }
 
     fun cancelTransfer(transferId: String) {
-        activeJobs[transferId]?.cancel()
-        removeActiveTransfer(transferId)
+        Log.d(TAG, "cancelTransfer: Cancelling transfer $transferId")
+        try {
+            activeJobs[transferId]?.cancel()
+            removeActiveTransfer(transferId)
+            Log.d(TAG, "cancelTransfer: Successfully cancelled transfer $transferId")
+        } catch (e: Exception) {
+            Log.e(TAG, "cancelTransfer: Error cancelling transfer $transferId", e)
+        }
     }
 
     fun cancelAllTransfers() {
-        activeJobs.values.forEach { it.cancel() }
-        activeJobs.clear()
-        _activeTransfers.value = emptyList()
+        Log.d(TAG, "cancelAllTransfers: Cancelling all ${activeJobs.size} active transfers")
+        try {
+            activeJobs.values.forEach { it.cancel() }
+            activeJobs.clear()
+            _activeTransfers.value = emptyList()
+            Log.d(TAG, "cancelAllTransfers: All transfers cancelled successfully")
+        } catch (e: Exception) {
+            Log.e(TAG, "cancelAllTransfers: Error cancelling transfers", e)
+        }
     }
 
     private fun updateActiveTransfer(transfer: FileTransfer) {
@@ -380,6 +415,23 @@ class FileTransferManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error calculating file checksum", e)
             ""
+        }
+    }
+
+    private fun formatFileSize(bytes: Long): String {
+        val units = arrayOf("B", "KB", "MB", "GB", "TB")
+        var size = bytes.toDouble()
+        var unitIndex = 0
+
+        while (size >= 1024 && unitIndex < units.size - 1) {
+            size /= 1024.0
+            unitIndex++
+        }
+
+        return if (unitIndex == 0) {
+            "${size.toInt()} ${units[unitIndex]}"
+        } else {
+            "%.1f %s".format(size, units[unitIndex])
         }
     }
 }

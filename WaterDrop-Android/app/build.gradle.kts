@@ -68,7 +68,7 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
     
-    // Dependency Injection - Temporarily disabled Hilt
+    // Dependency Injection - Manual setup without Hilt
     // implementation(libs.hilt.android)
     // implementation(libs.hilt.navigation.compose)
     // kapt(libs.hilt.compiler)

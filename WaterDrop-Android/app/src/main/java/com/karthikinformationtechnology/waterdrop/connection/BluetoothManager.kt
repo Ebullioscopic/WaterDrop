@@ -126,11 +126,18 @@ class WaterDropBluetoothManager(
 
         try {
             bluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
+            if (bluetoothLeScanner == null) {
+                Log.e(TAG, "startDiscovery: Unable to get Bluetooth LE scanner")
+                close(IllegalStateException("Unable to get Bluetooth LE scanner"))
+                return@callbackFlow
+            }
             Log.d(TAG, "startDiscovery: Got Bluetooth LE scanner")
             
             currentChannelCallback = { devices ->
                 Log.v(TAG, "startDiscovery: Sending ${devices.size} devices to flow")
-                trySend(devices)
+                if (!isClosedForSend) {
+                    trySend(devices)
+                }
             }
 
             val scanFilter = ScanFilter.Builder()
@@ -151,20 +158,30 @@ class WaterDropBluetoothManager(
                 bluetoothLeScanner?.startScan(listOf(scanFilter), scanSettings, scanCallback)
                 isScanning = true
                 Log.d(TAG, "startDiscovery: Bluetooth LE scan started successfully")
+                
+                // Send initial empty list
+                trySend(emptyList())
             } else {
                 Log.e(TAG, "startDiscovery: Missing BLUETOOTH_SCAN permission")
+                close(SecurityException("Missing BLUETOOTH_SCAN permission"))
+                return@callbackFlow
             }
 
             awaitClose {
                 Log.d(TAG, "startDiscovery: Closing scan flow")
-                if (isScanning && ActivityCompat.checkSelfPermission(
-                        context,
-                        Manifest.permission.BLUETOOTH_SCAN
-                    ) == PackageManager.PERMISSION_GRANTED
-                ) {
-                    bluetoothLeScanner?.stopScan(scanCallback as ScanCallback)
-                    isScanning = false
-                    Log.d(TAG, "startDiscovery: Stopped Bluetooth LE scan")
+                try {
+                    if (isScanning && ActivityCompat.checkSelfPermission(
+                            context,
+                            Manifest.permission.BLUETOOTH_SCAN
+                        ) == PackageManager.PERMISSION_GRANTED
+                    ) {
+                        bluetoothLeScanner?.stopScan(scanCallback)
+                        isScanning = false
+                        Log.d(TAG, "startDiscovery: Stopped Bluetooth LE scan")
+                    }
+                    currentChannelCallback = null
+                } catch (e: Exception) {
+                    Log.e(TAG, "startDiscovery: Error during cleanup", e)
                 }
             }
         } catch (e: Exception) {

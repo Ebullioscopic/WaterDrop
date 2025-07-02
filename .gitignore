@@ -1,0 +1,35 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+
+# Swift/SwiftUI (Xcode)
+*.xcuserstate
+*.xcworkspace
+*.xcodeproj
+*.xcuserdata
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+DerivedData/
+build/
+Pods/
+.DS_Store
+
+# Common
+*.log
+*.tmp
+*.swp
+*.swo
+.env
+node_modules/
+
+.github/

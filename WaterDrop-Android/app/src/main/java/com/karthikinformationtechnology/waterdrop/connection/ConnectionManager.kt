@@ -86,8 +86,8 @@ class ConnectionManager(
         Log.d(TAG, "startDiscovery: Starting device discovery")
         
         if (_connectionState.value == ConnectionState.DISCOVERING) {
-            Log.w(TAG, "startDiscovery: Discovery already in progress, skipping")
-            return
+            Log.w(TAG, "startDiscovery: Discovery already in progress, stopping first")
+            stopDiscovery()
         }
 
         if (!bluetoothManager.hasBluetoothPermissions()) {
@@ -107,20 +107,29 @@ class ConnectionManager(
         _discoveredDevices.value = emptyList()
         clearError()
 
-        // Start discovery
+        // Cancel any existing jobs first
+        discoveryJob?.cancel()
+        advertisingJob?.cancel()
+
+        // Start discovery with better error handling
         discoveryJob = scope.launch {
             try {
-                Log.d(TAG, "startDiscovery: Starting Bluetooth discovery")
+                Log.d(TAG, "startDiscovery: Starting Bluetooth discovery coroutine")
                 bluetoothManager.startDiscovery()
                     .catch { e ->
                         Log.e(TAG, "startDiscovery: Discovery failed", e)
-                        _errorMessage.value = "Discovery failed: ${e.message}"
-                        _connectionState.value = ConnectionState.ERROR
+                        if (e !is CancellationException) {
+                            _errorMessage.value = "Discovery failed: ${e.message}"
+                            _connectionState.value = ConnectionState.ERROR
+                        }
                     }
                     .collect { devices ->
                         _discoveredDevices.value = devices
                         Log.d(TAG, "startDiscovery: Discovered ${devices.size} devices")
                     }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "startDiscovery: Discovery coroutine cancelled")
+                throw e // Re-throw cancellation
             } catch (e: Exception) {
                 Log.e(TAG, "startDiscovery: Error during discovery", e)
                 _errorMessage.value = "Discovery error: ${e.message}"
@@ -128,21 +137,28 @@ class ConnectionManager(
             }
         }
 
-        // Start advertising
+        // Start advertising with better error handling  
         advertisingJob = scope.launch {
             try {
-                Log.d(TAG, "startDiscovery: Starting Bluetooth advertising")
+                Log.d(TAG, "startDiscovery: Starting Bluetooth advertising coroutine")
                 bluetoothManager.startAdvertising()
                     .catch { e ->
                         Log.e(TAG, "startDiscovery: Advertising failed", e)
-                        _errorMessage.value = "Advertising failed: ${e.message}"
+                        if (e !is CancellationException) {
+                            _errorMessage.value = "Advertising failed: ${e.message}"
+                        }
                     }
                     .collect { isAdvertising ->
                         Log.d(TAG, "startDiscovery: Advertising status: $isAdvertising")
                     }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "startDiscovery: Advertising coroutine cancelled")
+                throw e // Re-throw cancellation
             } catch (e: Exception) {
                 Log.e(TAG, "startDiscovery: Error during advertising", e)
-                _errorMessage.value = "Advertising error: ${e.message}"
+                if (e !is CancellationException) {
+                    _errorMessage.value = "Advertising error: ${e.message}"
+                }
             }
         }
     }

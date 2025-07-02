@@ -262,7 +262,7 @@ class WaterDropBluetoothManager(
             override fun onConnectionStateChange(gatt: BluetoothGatt?, status: Int, newState: Int) {
                 when (newState) {
                     BluetoothProfile.STATE_CONNECTED -> {
-                        Log.d(TAG, "Connected to GATT server")
+                        Log.d(TAG, "Connected to GATT server - discovering services...")
                         if (ActivityCompat.checkSelfPermission(
                                 context,
                                 Manifest.permission.BLUETOOTH_CONNECT
@@ -270,21 +270,52 @@ class WaterDropBluetoothManager(
                         ) {
                             gatt?.discoverServices()
                         }
-                        trySend(true)
+                        // DON'T send true yet - wait for services to be discovered
                     }
                     BluetoothProfile.STATE_DISCONNECTED -> {
                         Log.d(TAG, "Disconnected from GATT server")
                         trySend(false)
                         gatt?.close()
+                        gattClient = null
                     }
                 }
             }
 
             override fun onServicesDiscovered(gatt: BluetoothGatt?, status: Int) {
                 if (status == BluetoothGatt.GATT_SUCCESS) {
-                    Log.d(TAG, "Services discovered")
+                    Log.d(TAG, "Services discovered - setting up GATT client")
                     gattClient = gatt
-                    // Handle service discovery and setup characteristics
+                    
+                    // Log all discovered services for debugging
+                    val services = gatt?.services
+                    Log.d(TAG, "📋 Total services discovered: ${services?.size ?: 0}")
+                    services?.forEach { service ->
+                        Log.d(TAG, "📋 Service: ${service.uuid}")
+                        service.characteristics?.forEach { char ->
+                            Log.d(TAG, "📋   Characteristic: ${char.uuid} (Properties: ${char.properties})")
+                        }
+                    }
+                    
+                    // Verify we have the WaterDrop service and characteristic
+                    val service = gatt?.getService(UUID.fromString("12345678-1234-1234-1234-123456789ABC"))
+                    val characteristic = service?.getCharacteristic(UUID.fromString("87654321-4321-4321-4321-CBA987654321"))
+                    
+                    if (service != null && characteristic != null) {
+                        Log.d(TAG, "✅ WaterDrop service and characteristic found - ready for signaling")
+                        trySend(true) // NOW we can signal that connection is ready
+                    } else {
+                        Log.e(TAG, "❌ WaterDrop service or characteristic not found")
+                        if (service == null) {
+                            Log.e(TAG, "❌ Service 12345678-1234-1234-1234-123456789ABC not found")
+                        }
+                        if (characteristic == null) {
+                            Log.e(TAG, "❌ Characteristic 87654321-4321-4321-4321-CBA987654321 not found")
+                        }
+                        trySend(false)
+                    }
+                } else {
+                    Log.e(TAG, "Failed to discover services: $status")
+                    trySend(false)
                 }
             }
 
@@ -404,13 +435,30 @@ class WaterDropBluetoothManager(
     fun sendWebRTCSignaling(device: DiscoveredDevice, signalingData: WebRTCSignalingData) {
         Log.d(TAG, "sendWebRTCSignaling: Sending WebRTC signaling to ${device.name}")
         try {
-            // In a real implementation, this would send the signaling data
-            // over the established Bluetooth connection
             val jsonData = signalingData.toJsonString()
             Log.d(TAG, "sendWebRTCSignaling: Signaling data: $jsonData")
             
-            // For now, simulate sending the data
-            // In practice, this would use GATT characteristics or RFCOMM
+            // Use the current GATT client connection
+            if (gattClient != null) {
+                // Find the WaterDrop service and characteristic
+                val service = gattClient!!.getService(UUID.fromString("12345678-1234-1234-1234-123456789ABC"))
+                val characteristic = service?.getCharacteristic(UUID.fromString("87654321-4321-4321-4321-CBA987654321"))
+                
+                if (characteristic != null) {
+                    val data = jsonData.toByteArray(Charsets.UTF_8)
+                    Log.d(TAG, "sendWebRTCSignaling: Writing ${data.size} bytes to characteristic")
+                    
+                    // Write the signaling data to the characteristic
+                    characteristic.value = data
+                    val result = gattClient!!.writeCharacteristic(characteristic)
+                    Log.d(TAG, "sendWebRTCSignaling: Write result: $result")
+                } else {
+                    Log.e(TAG, "sendWebRTCSignaling: WaterDrop characteristic not found")
+                    Log.d(TAG, "sendWebRTCSignaling: Available services: ${gattClient!!.services?.map { it.uuid }}")
+                }
+            } else {
+                Log.e(TAG, "sendWebRTCSignaling: No GATT client connection available")
+            }
         } catch (e: Exception) {
             Log.e(TAG, "sendWebRTCSignaling: Error sending signaling data", e)
         }

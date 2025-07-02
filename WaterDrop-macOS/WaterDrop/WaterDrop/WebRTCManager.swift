@@ -50,7 +50,7 @@ class WebRTCManager: ObservableObject {
     
     // MARK: - WebRTC Connection Methods
     func createOffer(onLocalDescription: @escaping (String) -> Void, onIceCandidate: @escaping (String) -> Void) {
-        logger.info("🔄 WEBRTC CONNECTION: Creating WebRTC offer - signaling will be sent via Bluetooth")
+        logger.info("🔄 Creating WebRTC offer - signaling will be sent via Bluetooth")
         
         onLocalDescriptionReady = onLocalDescription
         onIceCandidateReady = onIceCandidate
@@ -58,14 +58,14 @@ class WebRTCManager: ObservableObject {
         // Simulate WebRTC offer creation (to be replaced with real WebRTC)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             let simulatedOffer = "v=0\r\no=- 1234567890 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
-            self?.logger.info("📤 WEBRTC CONNECTION: Offer created, sending via Bluetooth signaling")
-            self?.logger.debug("📤 WEBRTC CONNECTION: Offer SDP: \(simulatedOffer)")
+            self?.logger.info("ℹ️ 📤 WEBRTC INITIATION: Offer created, sending via Bluetooth signaling")
+            self?.logger.debug("� �📤 WEBRTC INITIATION: Offer SDP: \(simulatedOffer)")
             onLocalDescription(simulatedOffer)
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 let simulatedCandidate = "candidate:1 1 UDP 2113667326 192.168.1.100 54400 typ host"
-                self?.logger.info("📤 WEBRTC CONNECTION: ICE candidate ready, sending via Bluetooth signaling")
-                self?.logger.debug("📤 WEBRTC CONNECTION: ICE candidate: \(simulatedCandidate)")
+                self?.logger.info("ℹ️ 📤 WEBRTC INITIATION: ICE candidate ready, sending via Bluetooth signaling")
+                self?.logger.debug("🔍 📤 WEBRTC INITIATION: ICE candidate: \(simulatedCandidate)")
                 onIceCandidate(simulatedCandidate)
                 
                 self?.logger.info("🔄 WEBRTC CONNECTION: State changed from NEW to CONNECTING")
@@ -75,8 +75,8 @@ class WebRTCManager: ObservableObject {
     }
     
     func createAnswer(remoteOffer: String, onLocalDescription: @escaping (String) -> Void, onIceCandidate: @escaping (String) -> Void) {
-        logger.info("🔄 WEBRTC CONNECTION: Creating WebRTC answer for received offer")
-        logger.debug("🔄 WEBRTC CONNECTION: Remote offer SDP: \(remoteOffer)")
+        logger.info("� WEBRTC SIGNALING: Creating WebRTC answer for received offer from Android")
+        logger.debug("� WEBRTC SIGNALING: Remote offer SDP: \(remoteOffer)")
         
         onLocalDescriptionReady = onLocalDescription
         onIceCandidateReady = onIceCandidate
@@ -84,14 +84,14 @@ class WebRTCManager: ObservableObject {
         // Simulate WebRTC answer creation (to be replaced with real WebRTC)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
             let simulatedAnswer = "v=0\r\no=- 9876543210 2 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
-            self?.logger.info("📤 WEBRTC CONNECTION: Answer created, sending via Bluetooth signaling")
-            self?.logger.debug("📤 WEBRTC CONNECTION: Answer SDP: \(simulatedAnswer)")
+            self?.logger.info("ℹ️ 📤 WEBRTC SIGNALING: Answer created, sending via Bluetooth signaling")
+            self?.logger.debug("🔍 📤 WEBRTC SIGNALING: Answer SDP: \(simulatedAnswer)")
             onLocalDescription(simulatedAnswer)
             
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
                 let simulatedCandidate = "candidate:1 1 UDP 2113667326 192.168.1.101 54401 typ host"
-                self?.logger.info("📤 WEBRTC CONNECTION: ICE candidate ready, sending via Bluetooth signaling")
-                self?.logger.debug("📤 WEBRTC CONNECTION: ICE candidate: \(simulatedCandidate)")
+                self?.logger.info("ℹ️ 📤 WEBRTC SIGNALING: ICE candidate ready, sending via Bluetooth signaling")
+                self?.logger.debug("🔍 📤 WEBRTC SIGNALING: ICE candidate: \(simulatedCandidate)")
                 onIceCandidate(simulatedCandidate)
                 
                 self?.logger.info("🔄 WEBRTC CONNECTION: State changed from NEW to CONNECTING")
@@ -101,22 +101,21 @@ class WebRTCManager: ObservableObject {
     }
     
     func setRemoteAnswer(_ remoteAnswer: String) {
-            logger.info("📥 WEBRTC CONNECTION: Received remote answer via Bluetooth signaling")
-            logger.debug("📥 WEBRTC CONNECTION: Remote answer SDP: \(remoteAnswer)")
-            
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.logger.info("🌐 WEBRTC CONNECTION: WebRTC connection established successfully!")
-                self?.logger.info("📊 WEBRTC CONNECTION: Data channel opening for file transfers")
-                self?.connectionState = .connected
-                self?.dataChannelState = .open
-                self?.dataChannelOpen = true
-                self?.logger.info("✅ WEBRTC CONNECTION: Ready for file transfers via DataChannel")
-            }
+        logger.info("📥 WEBRTC SIGNALING: Received remote answer via Bluetooth signaling")
+        logger.debug("� WEBRTC SIGNALING: Remote answer SDP: \(remoteAnswer)")
+        
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+            self?.logger.info("🌐 WEBRTC CONNECTION: WebRTC connection established - data channel opening")
+            self?.connectionState = .connected
+            self?.dataChannelState = .open
+            self?.dataChannelOpen = true
+            self?.logger.info("✅ WEBRTC CONNECTION: Ready for file transfers via DataChannel")
         }
+    }
     
     func addIceCandidate(_ candidateString: String) {
-        logger.info("📥 WEBRTC CONNECTION: Received ICE candidate via Bluetooth signaling")
-        logger.debug("📥 WEBRTC CONNECTION: ICE candidate: \(candidateString)")
+        logger.info("📥 WEBRTC SIGNALING: Received ICE candidate via Bluetooth signaling")
+        logger.debug("� WEBRTC SIGNALING: ICE candidate: \(candidateString)")
         
         // Simulate ICE candidate processing (to be replaced with real WebRTC)
         logger.debug("🔍 WEBRTC CONNECTION: Processing ICE candidate for connection establishment")
@@ -265,13 +264,12 @@ struct ReceivedFile {
 
 // MARK: - WebRTC Signaling Data Model (Bluetooth signaling only - no file data)
 struct WebRTCSignalingData: Codable {
-    let type: SignalingType
-    let data: String?
     let deviceId: String
-    let deviceName: String?
-    let sdp: String?
-    let iceCandidate: String?
-    let timestamp: Int64?
+    let deviceName: String
+    let type: SignalingType
+    var sdp: String?
+    var iceCandidate: String?
+    var timestamp: Int64
     
     enum SignalingType: String, Codable {
         case offer = "OFFER"
@@ -282,9 +280,8 @@ struct WebRTCSignalingData: Codable {
     // Initialize for offer/answer
     init(type: SignalingType, data: String, deviceId: String, deviceName: String? = nil) {
         self.type = type
-        self.data = data
         self.deviceId = deviceId
-        self.deviceName = deviceName
+        self.deviceName = deviceName ?? "WaterDrop-Mac"
         self.sdp = data
         self.iceCandidate = nil
         self.timestamp = Int64(Date().timeIntervalSince1970 * 1000)
@@ -293,22 +290,86 @@ struct WebRTCSignalingData: Codable {
     // Initialize for ICE candidate
     init(type: SignalingType, iceCandidate: String, deviceId: String, deviceName: String? = nil) {
         self.type = type
-        self.data = iceCandidate
         self.deviceId = deviceId
-        self.deviceName = deviceName
+        self.deviceName = deviceName ?? "WaterDrop-Mac"
         self.sdp = nil
         self.iceCandidate = iceCandidate
         self.timestamp = Int64(Date().timeIntervalSince1970 * 1000)
     }
     
     func toJsonString() -> String? {
-        guard let data = try? JSONEncoder().encode(self) else { return nil }
-        return String(data: data, encoding: .utf8)
+        let sdpValue = sdp != nil ? "\"\(sdp!)\"" : "null"
+        let iceCandidateValue = iceCandidate != nil ? "\"\(iceCandidate!)\"" : "null"
+        
+        let jsonString = """
+        {
+            "deviceId": "\(deviceId)",
+            "deviceName": "\(deviceName)",
+            "type": "\(type.rawValue)",
+            "sdp": \(sdpValue),
+            "iceCandidate": \(iceCandidateValue),
+            "timestamp": \(timestamp)
+        }
+        """
+        return jsonString
     }
     
     static func fromJsonString(_ jsonString: String) -> WebRTCSignalingData? {
-        guard let data = jsonString.data(using: .utf8) else { return nil }
-        return try? JSONDecoder().decode(WebRTCSignalingData.self, from: data)
+        // Simple JSON parsing to match Android implementation
+        guard let deviceId = extractJsonValue(from: jsonString, key: "deviceId"),
+              let deviceName = extractJsonValue(from: jsonString, key: "deviceName"),
+              let typeStr = extractJsonValue(from: jsonString, key: "type") else {
+            return nil
+        }
+        
+        let sdp = extractJsonValue(from: jsonString, key: "sdp")
+        let iceCandidate = extractJsonValue(from: jsonString, key: "iceCandidate")
+        let timestamp = extractJsonValue(from: jsonString, key: "timestamp").flatMap { Int64($0) } ?? Int64(Date().timeIntervalSince1970 * 1000)
+        
+        guard let type = SignalingType(rawValue: typeStr) else {
+            return nil
+        }
+        
+        var data = WebRTCSignalingData(type: type, data: "", deviceId: deviceId, deviceName: deviceName)
+        data.timestamp = timestamp
+        
+        if let sdp = sdp, sdp != "null" {
+            var mutableData = data
+            mutableData.sdp = sdp
+            return mutableData
+        } else if let iceCandidate = iceCandidate, iceCandidate != "null" {
+            var mutableData = data
+            mutableData.iceCandidate = iceCandidate
+            return mutableData
+        }
+        
+        return data
+    }
+    
+    private static func extractJsonValue(from json: String, key: String) -> String? {
+        let pattern = "\"\(key)\"\\s*:\\s*\"([^\"]+)\""
+        let regex = try? NSRegularExpression(pattern: pattern)
+        let range = NSRange(location: 0, length: json.utf16.count)
+        
+        if let match = regex?.firstMatch(in: json, range: range) {
+            let matchRange = match.range(at: 1)
+            if let swiftRange = Range(matchRange, in: json) {
+                return String(json[swiftRange])
+            }
+        }
+        
+        // Handle numeric values (like timestamp)
+        let numericPattern = "\"\(key)\"\\s*:\\s*(\\d+)"
+        let numericRegex = try? NSRegularExpression(pattern: numericPattern)
+        
+        if let match = numericRegex?.firstMatch(in: json, range: range) {
+            let matchRange = match.range(at: 1)
+            if let swiftRange = Range(matchRange, in: json) {
+                return String(json[swiftRange])
+            }
+        }
+        
+        return nil
     }
 }
 

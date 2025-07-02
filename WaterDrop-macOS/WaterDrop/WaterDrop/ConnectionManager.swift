@@ -27,8 +27,8 @@ class ConnectionManager: NSObject, ObservableObject {
     @Published var webRTCConnectionState: WebRTCConnectionState = .new
     
     // MARK: - Private Properties
-    private let bluetoothManager = BluetoothManager()
-    private let webRTCManager = WebRTCManager()
+    public let bluetoothManager = BluetoothManager()
+    public let webRTCManager = WebRTCManager()
     
     private var cancellables = Set<AnyCancellable>()
     private var transferQueue = DispatchQueue(label: "transfer.queue", qos: .userInitiated)
@@ -71,6 +71,14 @@ class ConnectionManager: NSObject, ObservableObject {
             .assign(to: \.connectedDevice, on: self)
             .store(in: &cancellables)
         
+        // Bind Bluetooth connection state
+        bluetoothManager.$connectionState
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] bluetoothState in
+                self?.handleBluetoothStateChange(bluetoothState)
+            }
+            .store(in: &cancellables)
+        
         // Bind WebRTC state
         webRTCManager.$connectionState
             .receive(on: DispatchQueue.main)
@@ -89,6 +97,24 @@ class ConnectionManager: NSObject, ObservableObject {
             .store(in: &cancellables)
         
         logger.info("✅ Property bindings configured")
+    }
+    
+    private func handleBluetoothStateChange(_ bluetoothState: BluetoothConnectionState) {
+        logger.info("🔄 BLUETOOTH CONNECTION: State changed to: \(String(describing: bluetoothState))")
+        
+        switch bluetoothState {
+        case .connected:
+            logger.info("ℹ️ 🔄 BLUETOOTH CONNECTION: Starting WebRTC signaling process")
+            // Don't initiate if we're already connected to WebRTC
+            if webRTCConnectionState == .new {
+                initiateWebRTCConnection()
+            }
+        case .disconnected:
+            logger.info("ℹ️ 🔌 BLUETOOTH CONNECTION: Disconnected - cleaning up WebRTC")
+            webRTCManager.cleanup()
+        default:
+            break
+        }
     }
     
     private func setupWebRTCSignaling() {
@@ -169,22 +195,32 @@ class ConnectionManager: NSObject, ObservableObject {
     
     // MARK: - WebRTC Initiation
     func initiateWebRTCConnection() {
-        logger.info("🌐 Initiating WebRTC connection")
+        guard let connectedDevice = connectedDevice else {
+            logger.error("❌ No connected device for WebRTC initiation")
+            return
+        }
+        
+        logger.info("ℹ️ 🌐 WEBRTC INITIATION: Starting WebRTC connection process")
+        logger.info("ℹ️ 🌐 WEBRTC INITIATION: Target device: \(connectedDevice.name) (\(connectedDevice.identifier))")
         
         webRTCManager.createOffer { [weak self] localOffer in
+            guard let self = self else { return }
             let offerSignaling = WebRTCSignalingData(
-                type: .offer,
-                data: localOffer,
-                deviceId: ProcessInfo.processInfo.globallyUniqueString
-            )
-            self?.bluetoothManager.sendWebRTCSignaling(offerSignaling)
+                    type: .offer,
+                    data: localOffer,
+                    deviceId: ProcessInfo.processInfo.globallyUniqueString,
+                    deviceName: ProcessInfo.processInfo.hostName
+                )
+            self.bluetoothManager.sendWebRTCSignaling(offerSignaling)
         } onIceCandidate: { [weak self] candidate in
+            guard let self = self else { return }
             let candidateSignaling = WebRTCSignalingData(
-                type: .iceCandidate,
-                data: candidate,
-                deviceId: ProcessInfo.processInfo.globallyUniqueString
-            )
-            self?.bluetoothManager.sendWebRTCSignaling(candidateSignaling)
+                    type: .iceCandidate,
+                    iceCandidate: candidate,
+                    deviceId: ProcessInfo.processInfo.globallyUniqueString,
+                    deviceName: ProcessInfo.processInfo.hostName
+                )
+            self.bluetoothManager.sendWebRTCSignaling(candidateSignaling)
         }
     }
     
@@ -302,34 +338,53 @@ class ConnectionManager: NSObject, ObservableObject {
     }
     
     private func handleWebRTCSignaling(_ signalingData: WebRTCSignalingData) {
-        logger.info("📡 WEBRTC SIGNALING: Handling signaling type: \(signalingData.type.rawValue)")
-        
+        logger.info("📡 WEBRTC SIGNALING: Handling signaling type: \(signalingData.type.rawValue) from \(signalingData.deviceName ?? "Unknown")")
         switch signalingData.type {
         case .offer:
+            logger.info("📥 WEBRTC SIGNALING: Received offer from Android device")
             // Received an offer, create answer
-            webRTCManager.createAnswer(remoteOffer: signalingData.data!) { [weak self] localAnswer in
+            guard let offerSdp = signalingData.sdp else {
+                logger.error("❌ Offer missing SDP data")
+                return
+            }
+            
+            webRTCManager.createAnswer(remoteOffer: offerSdp) { [weak self] localAnswer in
+                guard let self = self else { return }
                 let answerSignaling = WebRTCSignalingData(
                     type: .answer,
                     data: localAnswer,
-                    deviceId: ProcessInfo.processInfo.globallyUniqueString
+                    deviceId: ProcessInfo.processInfo.globallyUniqueString,
+                    deviceName: ProcessInfo.processInfo.hostName
                 )
-                self?.bluetoothManager.sendWebRTCSignaling(answerSignaling)
+                self.bluetoothManager.sendWebRTCSignaling(answerSignaling)
             } onIceCandidate: { [weak self] candidate in
+                guard let self = self else { return }
                 let candidateSignaling = WebRTCSignalingData(
                     type: .iceCandidate,
-                    data: candidate,
-                    deviceId: ProcessInfo.processInfo.globallyUniqueString
+                    iceCandidate: candidate,
+                    deviceId: ProcessInfo.processInfo.globallyUniqueString,
+                    deviceName: ProcessInfo.processInfo.hostName
                 )
-                self?.bluetoothManager.sendWebRTCSignaling(candidateSignaling)
+                self.bluetoothManager.sendWebRTCSignaling(candidateSignaling)
             }
             
         case .answer:
+            logger.info("📥 WEBRTC SIGNALING: Received answer from Android device")
             // Received an answer, set it
-            webRTCManager.setRemoteAnswer(signalingData.data!)
+            guard let answerSdp = signalingData.sdp else {
+                logger.error("❌ Answer missing SDP data")
+                return
+            }
+            webRTCManager.setRemoteAnswer(answerSdp)
             
         case .iceCandidate:
+            logger.info("📥 WEBRTC SIGNALING: Received ICE candidate from Android device")
             // Received ICE candidate, add it
-            webRTCManager.addIceCandidate(signalingData.data!)
+            guard let candidate = signalingData.iceCandidate else {
+                logger.error("❌ ICE candidate missing data")
+                return
+            }
+            webRTCManager.addIceCandidate(candidate)
         }
     }
     

@@ -1,0 +1,24 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build macOS WaterDrop",
+			"type": "shell",
+			"command": "xcodebuild",
+			"args": [
+				"-project",
+				"WaterDrop.xcodeproj",
+				"-scheme",
+				"WaterDrop",
+				"-destination",
+				"platform=macOS",
+				"build"
+			],
+			"group": "build",
+			"isBackground": false,
+			"problemMatcher": [
+				"$gcc"
+			]
+		}
+	]
+}

@@ -16,6 +16,8 @@ struct ContentView: View {
     @State private var selectedFiles: [URL] = []
     @State private var showingTransferHistory = false
     @State private var animateConnection = false
+    @State private var showingConnectionAlert = false
+    @State private var incomingDeviceName = ""
     
     var body: some View {
         ZStack {
@@ -107,6 +109,16 @@ struct ContentView: View {
         } message: {
             Text(connectionManager.errorMessage ?? "")
         }
+        .alert("Connection Request", isPresented: $showingConnectionAlert) {
+            Button("Accept") {
+                connectionManager.bluetoothManager.acceptIncomingConnection()
+            }
+            Button("Decline", role: .cancel) {
+                connectionManager.bluetoothManager.declineIncomingConnection()
+            }
+        } message: {
+            Text("\(incomingDeviceName) wants to connect to your device.")
+        }
         .onReceive(connectionManager.$connectionState) { newState in
             logger.info("🔄 Connection state changed to: \(String(describing: newState))")
         }
@@ -118,6 +130,7 @@ struct ContentView: View {
         }
         .onAppear {
             logger.info("📱 ContentView appeared")
+            connectionManager.bluetoothManager.delegate = self
         }
         .onDisappear {
             logger.info("📱 ContentView disappeared")
@@ -835,6 +848,34 @@ struct FileFormatUtils {
         formatter.dateStyle = .short
         formatter.timeStyle = .short
         return formatter.string(from: date)
+    }
+}
+
+// MARK: - BluetoothManagerDelegate
+extension ContentView: BluetoothManagerDelegate {
+    func didDiscoverDevice(_ device: DiscoveredDevice) {
+        // Handled by ConnectionManager
+    }
+    
+    func didConnectToDevice(_ device: DiscoveredDevice) {
+        // Handled by ConnectionManager
+    }
+    
+    func didDisconnectFromDevice() {
+        // Handled by ConnectionManager
+    }
+    
+    func didReceiveConnectionRequest(from deviceName: String) {
+        incomingDeviceName = deviceName
+        showingConnectionAlert = true
+    }
+    
+    func didReceiveData(_ data: Data) {
+        // Handled by ConnectionManager
+    }
+    
+    func didFailToConnect(error: Error) {
+        // Handled by ConnectionManager
     }
 }
 
